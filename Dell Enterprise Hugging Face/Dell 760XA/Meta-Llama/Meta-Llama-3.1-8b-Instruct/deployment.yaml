@@ -1,0 +1,86 @@
+# Write the Kubernetes manifest below in a deployment.yaml file,
+# and then run the following kubectl command on the Kubernetes Cluster:
+# kubectl apply -f deployment.yaml
+ 
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: delldeh2
+  name: tgi-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tgi-server
+  template:
+    metadata:
+      labels:
+        app: tgi-server
+        hf.co/model: meta-llama--Llama-3.1-8B-Instruct
+        hf.co/task: text-generation
+    spec:
+      containers:
+        - name: tgi-container
+          image: registry.dell.huggingface.co/enterprise-dell-inference-meta-llama-meta-llama-3.1-8b-instruct
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+          env:
+            - name: NUM_SHARD
+              value: "1"
+            - name: PORT
+              value: "8000"
+            - name: MAX_BATCH_PREFILL_TOKENS
+              value: "16182"
+            - name: MAX_TOTAL_TOKENS
+              value: "8192"
+            - name: MAX_INPUT_TOKENS
+              value: "8000"
+          volumeMounts:
+            - mountPath: /dev/shm
+              name: dshm
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+      serviceAccountName: deh-sa
+      nodeSelector:
+          nvidia.com/gpu.product: NVIDIA-L40S
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: delldeh2
+  name: tgi-service
+spec:
+  type: LoadBalancer
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+  selector:
+    app: tgi-server
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: delldeh2
+  name: tgi-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx-ingress
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: tgi-service
+                port:
+                  number: 8000
+ 
+ 
+ 
