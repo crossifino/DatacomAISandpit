@@ -1,0 +1,85 @@
+# Write the Kubernetes manifest below in a deployment.yaml file,
+# and then run the following kubectl command on the Kubernetes Cluster:
+# kubectl apply -f deployment.yaml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: delldeh2
+  name: tgi-deployment2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tgi-server2
+  template:
+    metadata:
+      labels:
+        app: tgi-server2
+        hf.co/model: google--gemma-3-12b-it
+        hf.co/task: text-generation
+    spec:
+      containers:
+        - name: tgi-container
+          image: registry.dell.huggingface.co/enterprise-dell-inference-google-gemma-3-12b-it
+          resources:
+            limits:
+              nvidia.com/gpu: 2
+          env: 
+            - name: NUM_SHARD
+              value: "2"
+            - name: MAX_BATCH_PREFILL_TOKENS
+              value: "16000"
+            - name: MAX_TOTAL_TOKENS
+              value: "8192"
+            - name: MAX_INPUT_TOKENS
+              value: "8000"
+            - name: MAX_CONCURRENT_REQUESTS
+              value: "1000"
+            - name: PREFIX_CACHING
+              value: "0"
+          volumeMounts:
+            - mountPath: /dev/shm
+              name: dshm
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+      serviceAccountName: deh-sa
+      nodeSelector:
+          nvidia.com/gpu.product: NVIDIA-L40S
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: delldeh2
+  name: tgi-service2
+spec:
+  type: LoadBalancer
+  ports:
+    - protocol: TCP
+      port: 8001
+      targetPort: 8001
+  selector:
+    app: tgi-server2
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: delldeh2
+  name: tgi-ingress2
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx-ingress
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: tgi-service2
+                port:
+                  number: 8001
